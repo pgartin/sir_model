@@ -7,3 +7,6 @@ Things we want to try:
   -Attempt a trust region method.
   -Try approximating the hessian with the Jacobian (h approx J^T J).
     g = -J_k^T r_k
+
+
+    For now, out new function for gradient and hessian, is NOT giving me a descent direction, so failing the Amijio condition.
