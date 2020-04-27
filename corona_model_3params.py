@@ -118,29 +118,28 @@ def step_length(x,p_k,g):
     # Random step length that results in a descent
     max_step=1e-7
     a=max_step
-
+    
     rho =.5
     c = 10**(-8)
-
     # TRY ALGORITHM 3.1
     # Armijo Condition
     while (f(x+a*p_k)-f_k[k])/(a*np.dot(g,p_k))<=c:
+
         a=rho*a
         if a < 1e-10:
-            print("*")
             break
-    print(a)
     return a
 
 # Initialized variables
 tol = 10**3
-country_df, dates = loadData(2)
-delta = 1e-4
-k_max=4
+country_df, dates = loadData(1)
+delta = 1e-8
+k_max=2
 n=3
 f_k = np.zeros([k_max+1,1]);
 x = np.zeros([k_max+1,n]);
-x[0] = [4.0858428e-07, 3.0000000e-01, 1.3001009e+06] #[4100275.02654355]
+# x[0] = [4.0858428e-07, 3.0000000e-01, 1.3001009e+06] #[4100275.02654355]
+x[0] = [3.9608428e-07, 3.0000000e-01, 1.3001009e+06] #[4419375.93732124]
 ics=[x[0][2],1,0]
 
 #####
@@ -155,13 +154,12 @@ for k in range(0,k_max-1):
     g, h = computeDerivatives(x[k])
 
     p_k = step_direction(g,h)
-    alpha_k = step_length(x[k],p_k,g)
 
+    alpha_k = step_length(x[k],p_k,g)
 
     x[k+1] = x[k] + alpha_k * p_k
     f_k[k+1] = f(x[k+1])
 
-    print(f_k[k+1]-f_k[k], x[k+1],f_k[k+1])
 
 print('We just stopped at ',x[k],f_k[k])
 
