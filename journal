@@ -1,0 +1,9 @@
+4/18/20
+Created a new file to start varying the susceptible population count. Hard to say, but there is little to no improvement. A reason for this is the on parameter that seems to be changing is the beta value. The steps sizes are maxing out. So things to play with are trying to create more effecients step lengths, figure out why the other parmeters seems to never change. Do I just need more steps and better step size?
+4/24/20
+The algortihm gets as close as it can only change beta, and doesn't not even try to change the other variables. This is good news because this will be an easier fix.
+4/29/20
+Things we want to try:
+  -Attempt a trust region method.
+  -Try approximating the hessian with the Jacobian (h approx J^T J).
+    g = -J_k^T r_k
