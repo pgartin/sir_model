@@ -8,5 +8,15 @@ Things we want to try:
   -Try approximating the hessian with the Jacobian (h approx J^T J).
     g = -J_k^T r_k
 
-
     For now, out new function for gradient and hessian, is NOT giving me a descent direction, so failing the Amijio condition.
+
+4/28/20
+  Much progress today
+    Fixed the "not optimizing" in the susceptible population count. The function was not using the value but a stored one.
+    Switched to using population density for measured data instead to more evenly distribute x. This helped stabilize things a great deal.
+
+  Things I want to do still:
+    -have f(x) also measure the difference in the recover population. Algorithm does not seem to get the recovered numbers even close.
+    -use Jacobian to calculate derivatives.
+    -Set up trust region method algorithm
+    -get stupid colormap thing to work

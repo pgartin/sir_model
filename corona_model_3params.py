@@ -35,12 +35,16 @@ def loadData(src):
     countries = df['Country/Region'].unique()
     countries.sort()
     country_df = df[df["Country/Region"] == "Italy"]
+    population = 60.36e6
     country_df = country_df[["date","CumDeaths","CumConfirmed","CumRecovered"]]
     country_df["date"] = pd.to_datetime(df["date"])
     dates=country_df["date"]
     country_df.set_index("date", inplace = True)
     country_df.sort_index(inplace = True)
-    country_df["CumInfected"] = country_df["CumConfirmed"] - country_df["CumRecovered"]
+    country_df["CumRecovered"] = country_df["CumRecovered"].apply(lambda x: x/population)
+    country_df["CumDeaths"] = country_df["CumDeaths"].apply(lambda x: x/population)
+    country_df["CumConfirmed"] = country_df["CumConfirmed"].apply(lambda x: x/population)
+    country_df["CumInfected"] = country_df["CumConfirmed"] - country_df["CumRecovered"] - country_df["CumDeaths"]
 
     return country_df[40:], dates[40:]
 
@@ -48,7 +52,7 @@ def sir_model(t,beta,gamma,N,initalConditions):
     # Initial number of infected and recovered individuals, I0 and R0.
     I0, R0 = initalConditions[1], initalConditions[2]
     # Everyone else, S0, is susceptible to infection initially.
-    S0 = initalConditions[0]
+    S0 = N
 
     # The SIR model differential equations.
     def deriv(y, t, N, beta, gamma):
@@ -102,10 +106,11 @@ def f(x):
 def computeDerivatives(x):
     for i in range(0,n):
         df1[i] = f(x + delta * e[i])
-        for j in range(0,n):
-            df2[i][j] = f(x + delta * (e[i] + e[j]))
+        # for j in range(0,n):
+        #     df2[i][j] = f(x + delta * (e[i] + e[j]))
     g = np.multiply(np.fromfunction(lambda i, j: df1[j] - f_k[k], (1,n), dtype=int)[0],delta**(-1))
-    h = np.multiply(np.fromfunction(lambda i, j: df2[i,j] - df1[j] - df1[i] + f_k[k], (n, n), dtype=int),delta**(-2))
+    # h = np.multiply(np.fromfunction(lambda i, j: df2[i,j] - df1[j] - df1[i] + f_k[k], (n, n), dtype=int),delta**(-2))
+    h=e
     return g, h
 
 def step_direction(g,h):
@@ -116,31 +121,33 @@ def step_direction(g,h):
 
 def step_length(x,p_k,g):
     # Random step length that results in a descent
-    max_step=1e-7
+    max_step=1e-4
     a=max_step
-    
+
     rho =.5
-    c = 10**(-8)
+    c = 10**(-4)
     # TRY ALGORITHM 3.1
     # Armijo Condition
     while (f(x+a*p_k)-f_k[k])/(a*np.dot(g,p_k))<=c:
 
         a=rho*a
         if a < 1e-10:
+            print('*')
             break
     return a
 
 # Initialized variables
 tol = 10**3
-country_df, dates = loadData(1)
+country_df, dates = loadData(2)
 delta = 1e-8
-k_max=2
+k_max=10000
 n=3
 f_k = np.zeros([k_max+1,1]);
 x = np.zeros([k_max+1,n]);
-# x[0] = [4.0858428e-07, 3.0000000e-01, 1.3001009e+06] #[4100275.02654355]
-x[0] = [3.9608428e-07, 3.0000000e-01, 1.3001009e+06] #[4419375.93732124]
-ics=[x[0][2],1,0]
+
+x[0] = [0.18472115, 0.04907889, 0.69995732] #[0.03574405]
+
+ics=[x[0][2],3e-5,3e-6]
 
 #####
 df1 = np.zeros(n)
@@ -152,27 +159,23 @@ e = np.identity(n)
 f_k[0] = f(x[0])
 for k in range(0,k_max-1):
     g, h = computeDerivatives(x[k])
-
     p_k = step_direction(g,h)
-
     alpha_k = step_length(x[k],p_k,g)
 
     x[k+1] = x[k] + alpha_k * p_k
     f_k[k+1] = f(x[k+1])
 
-
 print('We just stopped at ',x[k],f_k[k])
 
 S, I, R = sir_model(range(0,country_df.shape[0]),x[k+1][0],x[k+1][1],x[k+1][2],ics)
-# plot_results(x[k][2],dates,S,I,R,country_df)
+plot_results(x[k][2],dates,S,I,R,country_df)
 
 # Plotting xk sequence.
 
 xs = np.transpose(x[0:k+2])[0]
 ys =np.transpose(x[0:k+2])[1]
-# zs =np.transpose(x[0:k+2])[2]
-zs = np.array(f_k[0:k+2])
-
+zs =np.transpose(x[0:k+2])[2]
+fs = np.array(f_k[0:k+2])
 
 # 3D plot with f(x) on the z-axis
 fig = plt.figure()
@@ -180,6 +183,7 @@ ax = fig.add_subplot(111, projection='3d')
 ax.set_xlabel('beta')
 ax.set_ylabel('gamma')
 ax.set_zlabel('N')
+
 ax.scatter(xs, ys, zs)
 
 plt.show()
