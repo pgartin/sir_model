@@ -9,6 +9,9 @@ register_matplotlib_converters()
 
 
 def loadData(src):
+
+    population = 60.36e6
+
     # Get Data
     baseURL = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
     def downloadData(fileName, columnName):
@@ -26,27 +29,42 @@ def loadData(src):
         # Load data from John's Hopkins
         df = downloadData("time_series_covid19_confirmed_global.csv", "CumConfirmed").merge(downloadData("time_series_covid19_deaths_global.csv", "CumDeaths")).merge(downloadData("time_series_covid19_recovered_global.csv", "CumRecovered"))
         df.to_csv('all_data.csv')
+    elif src==2:
+        df = pd.read_csv('all_data.csv')
+        df = df[df["Country/Region"] == "Italy"]
+
+        S, I, R = sir_model(range(0,df.shape[0]),0.18079949, 0.04784786, 0.69894923,ics)
+        sample_df = pd.DataFrame(data={'I':I,'R':R})
+        df["CumInfected"] = sample_df["I"].values.tolist()
+        df["CumRecovered"] = sample_df["R"].values.tolist()
+        df["CumInfected"] = df["CumInfected"].apply(lambda x: x*population)
+        df["CumRecovered"] = df["CumRecovered"].apply(lambda x: x*population)
+        df["CumConfirmed"] = df["CumInfected"] + df["CumRecovered"] + df["CumDeaths"]
+
     else:
         # load data from file, for speed
         df = pd.read_csv('all_data.csv')
-
 
     # Select desired data/sort
     countries = df['Country/Region'].unique()
     countries.sort()
     country_df = df[df["Country/Region"] == "Italy"]
-    population = 60.36e6
+
     country_df = country_df[["date","CumDeaths","CumConfirmed","CumRecovered"]]
     country_df["date"] = pd.to_datetime(df["date"])
     dates=country_df["date"]
     country_df.set_index("date", inplace = True)
     country_df.sort_index(inplace = True)
+
     country_df["CumRecovered"] = country_df["CumRecovered"].apply(lambda x: x/population)
     country_df["CumDeaths"] = country_df["CumDeaths"].apply(lambda x: x/population)
     country_df["CumConfirmed"] = country_df["CumConfirmed"].apply(lambda x: x/population)
     country_df["CumInfected"] = country_df["CumConfirmed"] - country_df["CumRecovered"] - country_df["CumDeaths"]
 
-    return country_df[40:], dates[40:]
+    if src!=2:
+        country_df, dates = country_df[40:], dates[40:]
+
+    return country_df, dates
 
 def sir_model(t,beta,gamma,N,initalConditions):
     # Initial number of infected and recovered individuals, I0 and R0.
@@ -90,27 +108,35 @@ def plot_results(N,index,S,I,R,df):
         ax.spines[spine].set_visible(False)
     plt.show()
 
-def f(x):
+def residual(x):
     S, I, R = sir_model(range(0,country_df.shape[0]),x[0],x[1],x[2],ics)
 
     ir_df = pd.DataFrame(data={'I':I,'R':R})
     country_df["I"]=ir_df["I"].values.tolist()
     country_df["R"]=ir_df["R"].values.tolist()
-    country_df["ErrorI"] = abs(country_df["I"] - country_df['CumInfected'])
-    country_df["ErrorR"] = abs(country_df["R"] - country_df['CumRecovered'])
 
+    country_df["ErrorI"] = country_df["I"] - country_df['CumInfected']
+    country_df["ErrorR"] = country_df["R"] - country_df['CumRecovered']
 
+    #residual
+    r = np.array(country_df["ErrorI"].to_numpy() + country_df["ErrorR"].to_numpy())
 
-    return country_df["ErrorI"].sum() + country_df["ErrorR"].sum()
+    return r
 
 def computeDerivatives(x):
+    df1=[]
+    e = np.identity(n)
+
+    # Computing the Jacobian
     for i in range(0,n):
-        df1[i] = f(x + delta * e[i])
-        # for j in range(0,n):
-        #     df2[i][j] = f(x + delta * (e[i] + e[j]))
-    g = np.multiply(np.fromfunction(lambda i, j: df1[j] - f_k[k], (1,n), dtype=int)[0],delta**(-1))
-    # h = np.multiply(np.fromfunction(lambda i, j: df2[i,j] - df1[j] - df1[i] + f_k[k], (n, n), dtype=int),delta**(-2))
-    h=e
+        df1.append(np.array(residual(x + delta * e[i])))
+    j = (np.column_stack((df1[0],df1[1],df1[1])) - np.column_stack((r,r,r)))/delta
+
+    # Gradient
+    g= np.matmul(np.transpose(j),r)
+    # Approximate hessian
+    h=np.matmul(np.transpose(j),j)
+
     return g, h
 
 def step_direction(g,h):
@@ -121,51 +147,51 @@ def step_direction(g,h):
 
 def step_length(x,p_k,g):
     # Random step length that results in a descent
-    max_step=1e-4
+    max_step=1
     a=max_step
 
     rho =.5
-    c = 10**(-4)
+    c = 10**(-1)
     # TRY ALGORITHM 3.1
     # Armijo Condition
-    while (f(x+a*p_k)-f_k[k])/(a*np.dot(g,p_k))<=c:
+    rTest = residual(x+a*p_k)
+    while (1/2 * np.dot(rTest,rTest)-f_k[k])/(a*np.dot(g,p_k))<=c:
 
         a=rho*a
         if a < 1e-10:
             print('*')
             break
+        rTest = residual(x+a*p_k)
     return a
 
 # Initialized variables
-tol = 10**3
-country_df, dates = loadData(2)
-delta = 1e-8
-k_max=10000
+k_max=2
 n=3
-f_k = np.zeros([k_max+1,1]);
 x = np.zeros([k_max+1,n]);
-
-x[0] = [0.18472115, 0.04907889, 0.69995732] #[0.03574405]
+# x[0] = [0.18472115, 0.04907889, 0.69995732] #[0.03574405] 4/28
+# x[0] = [0.18079949, 0.04784786, 0.69894923] #[0.03712064]
+x[0] = [0.13689975, 0.01110942, 0.68110942] #[2.10102271e-05]
+# x[0] = [0.56599154, 0.78304612, 1.43414749] #[2.24878107e-06]
 
 ics=[x[0][2],3e-5,3e-6]
-
-#####
-df1 = np.zeros(n)
-df2 = np.zeros([n,n])
-e = np.identity(n)
-#####
+country_df, dates = loadData(2)
+delta = 1e-8
+f_k = np.zeros([k_max+1,1]);
 
 
-f_k[0] = f(x[0])
+r = residual(x[0])
+f_k[0] = 1/2 * np.dot(r,r)
 for k in range(0,k_max-1):
     g, h = computeDerivatives(x[k])
     p_k = step_direction(g,h)
     alpha_k = step_length(x[k],p_k,g)
 
     x[k+1] = x[k] + alpha_k * p_k
-    f_k[k+1] = f(x[k+1])
-
+    r = residual(x[k+1])
+    f_k[k+1] = 1/2 * np.dot(r,r)
+    print(f_k[k+1]-f_k[k],x[k+1],k)
 print('We just stopped at ',x[k],f_k[k])
+
 
 S, I, R = sir_model(range(0,country_df.shape[0]),x[k+1][0],x[k+1][1],x[k+1][2],ics)
 plot_results(x[k][2],dates,S,I,R,country_df)
