@@ -20,3 +20,6 @@ Things we want to try:
     -use Jacobian to calculate derivatives.
     -Set up trust region method algorithm
     -get stupid colormap thing to work
+
+4/29/20
+  I implemented the finite Jacobian calculation and am now using it to calculate the gradient and the hessian. The function is now calculating the error of both I and R predictions. I also set up an alternate data source which creates fake data for a solution to the SIR model for testing. As a result of using it, the code is working, but slowly. I expect that implementing that hessian will help a great deal, either with a quasi newton method, or a trust region method.
