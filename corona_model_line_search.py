@@ -164,8 +164,9 @@ def step_length(x,p_k,g):
         rTest = residual(x+a*p_k)
     return a
 
+
 # Initialized variables
-k_max=2
+k_max=500
 n=3
 x = np.zeros([k_max+1,n]);
 # x[0] = [0.18472115, 0.04907889, 0.69995732] #[0.03574405] 4/28
@@ -183,13 +184,14 @@ r = residual(x[0])
 f_k[0] = 1/2 * np.dot(r,r)
 for k in range(0,k_max-1):
     g, h = computeDerivatives(x[k])
+
     p_k = step_direction(g,h)
     alpha_k = step_length(x[k],p_k,g)
 
     x[k+1] = x[k] + alpha_k * p_k
     r = residual(x[k+1])
     f_k[k+1] = 1/2 * np.dot(r,r)
-    print(f_k[k+1]-f_k[k],x[k+1],k)
+    # print(f_k[k+1]-f_k[k],x[k+1],k)
 print('We just stopped at ',x[k],f_k[k])
 
 

@@ -23,3 +23,24 @@ Things we want to try:
 
 4/29/20
   I implemented the finite Jacobian calculation and am now using it to calculate the gradient and the hessian. The function is now calculating the error of both I and R predictions. I also set up an alternate data source which creates fake data for a solution to the SIR model for testing. As a result of using it, the code is working, but slowly. I expect that implementing that hessian will help a great deal, either with a quasi newton method, or a trust region method.
+
+4/30/20
+  Tasks:
+    -create the quadradic model.
+
+    -Minimize the model
+    -compute rho
+    -make appropriate actions based on rho
+5/1/2020
+  For trust region method, it is necessary that B_k is positive definite. It is not. Why is it not. The hessian not spd implies that j is not spd(Note that this is of course true. j is not event square). in the end, j is approximated with finite derivatives, but should it be that sensitive?
+
+5/2/2020
+  We have been provided the following tips for dealing with this non-pd hessian. First I am looking thorugh section 3.4 for modifying the hessian to make it spd. Next I will research quasi-newton methods such as BFGS.
+  Section 3.4
+    Eigen-value Modification
+      If we can do spectral decomposition, then we can modify the problematic eigen value to be positive, but small.
+      Okay, so I have done this now. the hessian is pd now, but my rho is stil large negative. Time to investigate.
+        What we have is that the function is not decreasing with the choice step p. Which means m is a terrible model approximation of f as written. It's worth nothing that the first step is really good, them the following steps are really bad. What happens? Perhaps the model is not updating. Need to investigate further.
+      Okay problem solved. The optimize of the model was not bounding the solution to inside the trust radius. so basically updating the radius did nothing and the sequence basically stopped changing.
+  The trust regions is not super fast, but I have a lot of parameters to tweak, so this could be good. the movement is interesting. I'm doing a long run now, so I will make more oberservations shortly:
+    keeps pushing for S>N. Looking at the plots, it is attributing a lower function value to the recovered model close to the infection curve. So, we are going the wrong direction. Need a break. Time to push this up.
