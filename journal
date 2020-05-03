@@ -39,8 +39,14 @@ Things we want to try:
   Section 3.4
     Eigen-value Modification
       If we can do spectral decomposition, then we can modify the problematic eigen value to be positive, but small.
-      Okay, so I have done this now. the hessian is pd now, but my rho is stil large negative. Time to investigate.
+      Okay, so I have done this now. the hessian is pd now, but my rho is still large negative. Time to investigate.
         What we have is that the function is not decreasing with the choice step p. Which means m is a terrible model approximation of f as written. It's worth nothing that the first step is really good, them the following steps are really bad. What happens? Perhaps the model is not updating. Need to investigate further.
       Okay problem solved. The optimize of the model was not bounding the solution to inside the trust radius. so basically updating the radius did nothing and the sequence basically stopped changing.
   The trust regions is not super fast, but I have a lot of parameters to tweak, so this could be good. the movement is interesting. I'm doing a long run now, so I will make more oberservations shortly:
     keeps pushing for S>N. Looking at the plots, it is attributing a lower function value to the recovered model close to the infection curve. So, we are going the wrong direction. Need a break. Time to push this up.
+
+5/3/2020
+  Why does the function keep tending toward mixing the I and R curves? I will investigate.
+  The TRM works really well on know data, VERY FAST! but the real data sends it to a susceptible population density of 1 and gets stuck there. Need to consider two questions:
+    1. Why/how can in consider a lower function state for s0=1?
+    2. Why can't I match the data with my varied parameters alone?
