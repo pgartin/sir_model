@@ -43,7 +43,7 @@ def loadData(src):
         df["CumRecovered"] = sample_df["R"].values.tolist()
         df["CumInfected"] = df["CumInfected"].apply(lambda x: x*population)
         df["CumRecovered"] = df["CumRecovered"].apply(lambda x: x*population)
-        df["CumConfirmed"] = df["CumInfected"] + df["CumRecovered"] + df["CumDeaths"]
+        df["CumConfirmed"] = df["CumInfected"] + df["CumRecovered"]# + df["CumDeaths"]
 
     else:
         # load data from file, for speed
@@ -72,7 +72,7 @@ def loadData(src):
 
 def sir_model(t,beta,gamma,N,initalConditions):
     # Initial number of infected and recovered individuals, I0 and R0.
-    I0, R0 = initalConditions[1], initalConditions[2]
+    I0, R0 = initalConditions[0], initalConditions[1]
     # Everyone else, S0, is susceptible to infection initially.
     S0 = N
 
@@ -187,23 +187,48 @@ def nearestSPD(A):
             t.append(delta - L[i])
     return A + np.matmul(Q,np.matmul(np.diag(t),Q.transpose()))
 
+def find_step(f,g,h,x):
+    def model(p):
+        return quad_model(f,g,h,p)
+    x0 = np.array([1e-3,1e-3,1e-3])
+    bnds = Bounds(radius_k[k]*[-1, -1, -1], radius_k[k]*[1, 1, 1])
+    def constraint1(t):
+        return x[0] + t[0]
+    def constraint2(t):
+        return x[1] + t[1]
+    def constraint3(t):
+        return x[2] + t[2]
+    def constraint4(t):
+        return 1 - (x[2] + t[2])
+    con1 = {'type' : 'ineq', 'fun': constraint1}
+    con2 = {'type' : 'ineq', 'fun': constraint2}
+    con3 = {'type' : 'ineq', 'fun': constraint3}
+    con4 = {'type' : 'ineq', 'fun': constraint4}
+    cons = [con1,con2,con3,con4]
+    res = minimize(model, x0, method='SLSQP', bounds=bnds,constraints=cons,options={ 'ftol': 1e-11,'disp': False})
+    p = res.x
+
+    return p, model(p)
+
+
 
 # Initialized variables
-k_max=2
+k_max=1000
 n=3
 x = np.zeros([k_max+1,n]);
-# x[0] =  [0.18124844, 0.05229869, 0.69905675]# [2.03393267e-05]
-x[0] =  [0.22769259, 0.09338566, 0.71232997] #[1.78672562e-05]
+x[0] =  [0.18124844, 0.05229869, 0.69905675]# [2.03393267e-05]
+# [1.42776308 1.4195006  1.] [7.48147626e-07]
+# x[0] =[0.18079949, 0.04784786, 0.69894923] ##Exact
 
 # [S0, I0, R0]
-ics=[x[0][2],3e-5,3e-6]
+ics=[3e-5,3e-6]
 
 # src=1 for from text file, 2 for from a known model, and 3 from the online database
 country_df, dates = loadData(1)
 delta = 1e-8
 f_k = np.zeros([k_max+1,1]);
 
-max_radius = .01
+max_radius = .1
 radius_k = np.zeros([k_max+1,1]);
 radius_k[0] = max_radius
 
@@ -213,49 +238,50 @@ r = residual(x[0])
 f_k[0] = 1/2 * np.dot(r,r)
 for k in range(0,k_max-1):
     g, h, j = computeDerivatives(x[k],r)
+
     # Minimizes the quadratic model
-    x0 = np.array([0,0,0])
+    p, m = find_step(f_k[k],g,h,x[k])
 
-    def model_der(x):
-        return g
-    def model_hess(x):
-        return h
-    def model(p):
-        return quad_model(f_k[k],g,h,p)
-
-    bounds = Bounds(radius_k[k]*[-1, -1, -1], radius_k[k]*[1, 1, 1])
-    res = minimize(model, x0, method='trust-constr', jac=model_der, hess=model_hess, bounds=bounds)
-
-    p=res.x
     rp = residual(x[k]+p)
     fp = 1/2 * np.dot(rp,rp)
 
-    m = model(p)
-
+    if((f_k[k] - m)==0):
+        print("Model is minimized at x_k")
+        print(g)
+        break
     rho = (f_k[k] - fp)/(f_k[k] - m)
     # print(rho)
 
     if rho < 1/4:
         # bad agreement between the model and the function
         radius_k[k+1] = (1/4)*radius_k[k]
-        print("bad")
+        # print("bad")
     else:
         if rho > (3/4):
             # Great agreement between the model and the function
             radius_k[k+1] = min(2*radius_k[k],max_radius)
-            print("great")
+            # print("great")
+
         else:
             # good agreement between the model and the function
             radius_k[k+1] = radius_k[k]
-            print("good")
+            # print("good")
 
     if rho > ada:
         x[k+1] = x[k] + p
         r = residual(x[k+1])
+
     else:
         x[k+1] = x[k]
 
     f_k[k+1] = 1/2 * np.dot(r,r)
+
+    if (f_k[k+1] - f_k[k]) > 1e-15:
+        print("BAD STEP EXCEPTED!!!!", rho)
+        if (f_k[k] - fp)<0 and (f_k[k] - m)<0:
+            print('Reason: model minimized incorrectly and the step increased the function')
+        break
+
     print(f_k[k+1]-f_k[k],x[k+1],k)
 
 print('We just stopped at ',x[k],f_k[k])
