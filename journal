@@ -35,14 +35,14 @@ Things we want to try:
   For trust region method, it is necessary that B_k is positive definite. It is not. Why is it not. The hessian not spd implies that j is not spd(Note that this is of course true. j is not event square). in the end, j is approximated with finite derivatives, but should it be that sensitive?
 
 5/2/2020
-  We have been provided the following tips for dealing with this non-pd hessian. First I am looking thorugh section 3.4 for modifying the hessian to make it spd. Next I will research quasi-newton methods such as BFGS.
+  We have been provided the following tips for dealing with this non-pd hessian. First I am looking through section 3.4 for modifying the hessian to make it spd. Next I will research quasi-newton methods such as BFGS.
   Section 3.4
     Eigen-value Modification
       If we can do spectral decomposition, then we can modify the problematic eigen value to be positive, but small.
       Okay, so I have done this now. the hessian is pd now, but my rho is still large negative. Time to investigate.
         What we have is that the function is not decreasing with the choice step p. Which means m is a terrible model approximation of f as written. It's worth nothing that the first step is really good, them the following steps are really bad. What happens? Perhaps the model is not updating. Need to investigate further.
       Okay problem solved. The optimize of the model was not bounding the solution to inside the trust radius. so basically updating the radius did nothing and the sequence basically stopped changing.
-  The trust regions is not super fast, but I have a lot of parameters to tweak, so this could be good. the movement is interesting. I'm doing a long run now, so I will make more oberservations shortly:
+  The trust regions is not super fast, but I have a lot of parameters to tweak, so this could be good. the movement is interesting. I'm doing a long run now, so I will make more observations shortly:
     keeps pushing for S>N. Looking at the plots, it is attributing a lower function value to the recovered model close to the infection curve. So, we are going the wrong direction. Need a break. Time to push this up.
 
 5/3/2020
@@ -50,3 +50,8 @@ Things we want to try:
   The TRM works really well on know data, VERY FAST! but the real data sends it to a susceptible population density of 1 and gets stuck there. Need to consider two questions:
     1. Why/how can in consider a lower function state for s0=1?
     2. Why can't I match the data with my varied parameters alone?
+
+5/4/20
+  I'm not really sure how I want to proceed, but for starters we can start to optimize the initial infected population, that will fix the initial recovered by normalization. I want to look closely that I am considering the death count properly. After this, I really need to investigate the questions above. For this I want to take a close look at what the residue function says when this happens.
+
+  Good news, we are getting consistent results with the TRM. Bad news, the best the model can get is not looking good. I believe we are reaching limitations with this model. Maybe it's time we include deaths. Be sure to take plot pictures at this point

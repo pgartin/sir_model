@@ -10,8 +10,6 @@ from mpl_toolkits.mplot3d import Axes3D
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 
-
-
 def loadData(src):
 
     population = 60.36e6
@@ -37,7 +35,7 @@ def loadData(src):
         df = pd.read_csv('all_data.csv')
         df = df[df["Country/Region"] == "Italy"]
 
-        S, I, R = sir_model(range(0,df.shape[0]),0.18079949, 0.04784786, 0.69894923,ics)
+        S, I, R = sir_model(range(0,df.shape[0]),0.18079949, 0.04784786, 0.99,.01)
         sample_df = pd.DataFrame(data={'I':I,'R':R})
         df["CumInfected"] = sample_df["I"].values.tolist()
         df["CumRecovered"] = sample_df["R"].values.tolist()
@@ -66,18 +64,17 @@ def loadData(src):
     country_df["CumInfected"] = country_df["CumConfirmed"] - country_df["CumRecovered"] - country_df["CumDeaths"]
 
     if src!=2:
-        country_df, dates = country_df[40:], dates[40:]
+        start_point = 10
+        country_df, dates = country_df[start_point:], dates[start_point:]
 
     return country_df, dates
 
-def sir_model(t,beta,gamma,N,initalConditions):
-    # Initial number of infected and recovered individuals, I0 and R0.
-    I0, R0 = initalConditions[0], initalConditions[1]
-    # Everyone else, S0, is susceptible to infection initially.
-    S0 = N
+def sir_model(t,beta,gamma,s0,i0):
 
+    # The initially recvoerd count is fixed by nomralization.
+    r0 = 1 - s0 - i0
     # The SIR model differential equations.
-    def deriv(y, t, N, beta, gamma):
+    def deriv(y, t, beta, gamma):
         S, I, R = y
         dSdt = -beta * S * I
         dIdt = beta * S * I - gamma * I
@@ -85,24 +82,24 @@ def sir_model(t,beta,gamma,N,initalConditions):
         return dSdt, dIdt, dRdt
 
     # Initial conditions vector
-    y0 = S0, I0, R0
+    y0 = s0, i0, r0
     # Integrate the SIR equations over the time grid, t.
 
-    ret = odeint(deriv, y0, t, args=(N, beta, gamma))
+    ret = odeint(deriv, y0, t, args=(beta, gamma))
 
     return ret.T
 
-def plot_results(N,index,S,I,R,df):
+def plot_results(index,S,I,R,df):
 
     # Plot the data on three separate curves for S(t), I(t) and R(t)
     fig = plt.figure(facecolor='w')
     ax = fig.add_subplot(111, axisbelow=True)
     # ax.plot(index, S, 'b', alpha=0.5, lw=2, label='Susceptible(Model)',dashes=[3, 3, 3, 3])
     ax.plot(index, I, 'r', alpha=0.5, lw=2, label='Infected(Model)',dashes=[3, 3, 3, 3])
-    ax.plot(index, R, 'g', alpha=0.5, lw=2, label='Recovered with immunity(Model)',dashes=[3, 3, 3, 3])
+    ax.plot(index, R, 'b', alpha=0.5, lw=2, label='Recovered with immunity(Model)',dashes=[3, 3, 3, 3])
 
-    ax.plot(index, country_df["CumInfected"].divide(1), 'r', alpha=0.5, lw=2, label='Infected')
-    ax.plot(index, country_df["CumRecovered"].divide(1), 'g', alpha=0.5, lw=2, label='Recovered')
+    ax.plot(index, country_df["CumInfected"], 'r', alpha=0.5, lw=2, label='Infected')
+    ax.plot(index, country_df["CumRecovered"], 'b', alpha=0.5, lw=2, label='Recovered')
     ax.set_xlabel('Time /days')
     ax.set_ylabel('Percentage of Pop.')
     # ax.set_ylim(0,.002)
@@ -113,7 +110,7 @@ def plot_results(N,index,S,I,R,df):
     plt.show()
 
 def residual(x):
-    S, I, R = sir_model(range(0,country_df.shape[0]),x[0],x[1],x[2],ics)
+    S, I, R = sir_model(range(0,country_df.shape[0]),x[0],x[1],x[2],x[3])
 
     ir_df = pd.DataFrame(data={'I':I,'R':R})
     country_df["I"]=ir_df["I"].values.tolist()
@@ -123,20 +120,20 @@ def residual(x):
     country_df["ErrorR"] = country_df["R"] - country_df['CumRecovered']
 
     #residual
-    rvector = np.array(country_df["ErrorI"].to_numpy() + country_df["ErrorR"].to_numpy())
+    rvector = np.append(country_df["ErrorI"].to_numpy(), country_df["ErrorR"].to_numpy())
 
-    # country_df.drop(["ErrorI","ErrorR"], axis=1)
-    # ir_df.drop(["I","R"], axis=1)
     return rvector
 
 def computeDerivatives(x,r):
-    df1=[]
+    deltaf=[]
+    rOnes=[]
     e = np.identity(n)
 
     # Computing the Jacobian
     for i in range(0,n):
-        df1.append(np.array(residual(x + delta * e[i])))
-    j = (np.column_stack((df1[0],df1[1],df1[2])) - np.column_stack((r,r,r)))/delta
+        deltaf.append(np.array(residual(x + delta * e[i])))
+        rOnes.append(r)
+    j = (np.column_stack(deltaf) - np.column_stack(rOnes))/delta
 
     # Gradient
     g= np.matmul(np.transpose(j),r)
@@ -145,33 +142,8 @@ def computeDerivatives(x,r):
 
     return g, h, j
 
-def step_direction(g,h):
-    # Steepest descent
-    p=-np.divide(g,np.linalg.norm(g))
-    # p = -np.matmul(np.linalg.pinv(h),g)
-    return p
-
-def step_length(x,p_k,g):
-    # Random step length that results in a descent
-    max_step=1
-    a=max_step
-
-    rho =.5
-    c = 10**(-1)
-    # TRY ALGORITHM 3.1
-    # Armijo Condition
-    rTest = residual(x+a*p_k)
-    while (1/2 * np.dot(rTest,rTest)-f_k[k])/(a*np.dot(g,p_k))<=c:
-
-        a=rho*a
-        if a < 1e-10:
-            print('*')
-            break
-        rTest = residual(x+a*p_k)
-    return a
-
 def quad_model(f,g,h,p):
-    return f + np.matmul(g.transpose(),p) + 1/2 * np.matmul(p.transpose(),np.matmul(h,p));
+    return f + np.matmul(g.transpose(),p) + np.matmul(p.transpose(),np.matmul(h,p));
 
 def is_pos_def(x):
     return np.all(np.linalg.eigvals(x) > 0)
@@ -190,8 +162,10 @@ def nearestSPD(A):
 def find_step(f,g,h,x):
     def model(p):
         return quad_model(f,g,h,p)
-    x0 = np.array([1e-3,1e-3,1e-3])
-    bnds = Bounds(radius_k[k]*[-1, -1, -1], radius_k[k]*[1, 1, 1])
+    x0 = 1e-3*np.ones(n)
+    bnds = Bounds(-radius_k[k]*np.ones(n), radius_k[k]*np.ones(n))
+    def constraint0(t):
+        return 1 - (x[2] + t[2]) - (x[3] + t[3])
     def constraint1(t):
         return x[0] + t[0]
     def constraint2(t):
@@ -199,12 +173,14 @@ def find_step(f,g,h,x):
     def constraint3(t):
         return x[2] + t[2]
     def constraint4(t):
-        return 1 - (x[2] + t[2])
+        return x[3] + t[3]
+
+    con0 = {'type' : 'ineq', 'fun': constraint0}
     con1 = {'type' : 'ineq', 'fun': constraint1}
     con2 = {'type' : 'ineq', 'fun': constraint2}
     con3 = {'type' : 'ineq', 'fun': constraint3}
     con4 = {'type' : 'ineq', 'fun': constraint4}
-    cons = [con1,con2,con3,con4]
+    cons = [con0,con1,con2,con3,con4]
     res = minimize(model, x0, method='SLSQP', bounds=bnds,constraints=cons,options={ 'ftol': 1e-11,'disp': False})
     p = res.x
 
@@ -214,19 +190,20 @@ def find_step(f,g,h,x):
 
 # Initialized variables
 k_max=1000
-n=3
-x = np.zeros([k_max+1,n]);
-x[0] =  [0.18124844, 0.05229869, 0.69905675]# [2.03393267e-05]
-# [1.42776308 1.4195006  1.] [7.48147626e-07]
-# x[0] =[0.18079949, 0.04784786, 0.69894923] ##Exact
 
-# [S0, I0, R0]
-ics=[3e-5,3e-6]
+n=4
+x = np.zeros([k_max+1,n]);
+
+# [beta, gamma, s0, i0]
+# x[0] =[.1, .1, .1,.1]
+x[0] = [.3, .1, .999, 0.001]
+
+
 
 # src=1 for from text file, 2 for from a known model, and 3 from the online database
 country_df, dates = loadData(1)
 delta = 1e-8
-f_k = np.zeros([k_max+1,1]);
+f_k = np.zeros(k_max+1);
 
 max_radius = .1
 radius_k = np.zeros([k_max+1,1]);
@@ -235,38 +212,32 @@ radius_k[0] = max_radius
 ada = 1/4
 
 r = residual(x[0])
-f_k[0] = 1/2 * np.dot(r,r)
-for k in range(0,k_max-1):
+f_k[0] = np.dot(r,r)
+for k in range(0,k_max):
     g, h, j = computeDerivatives(x[k],r)
 
     # Minimizes the quadratic model
     p, m = find_step(f_k[k],g,h,x[k])
 
     rp = residual(x[k]+p)
-    fp = 1/2 * np.dot(rp,rp)
+    fp = np.dot(rp,rp)
 
     if((f_k[k] - m)==0):
         print("Model is minimized at x_k")
         print(g)
         break
     rho = (f_k[k] - fp)/(f_k[k] - m)
-    # print(rho)
 
     if rho < 1/4:
         # bad agreement between the model and the function
         radius_k[k+1] = (1/4)*radius_k[k]
-        # print("bad")
     else:
         if rho > (3/4):
             # Great agreement between the model and the function
             radius_k[k+1] = min(2*radius_k[k],max_radius)
-            # print("great")
-
         else:
             # good agreement between the model and the function
             radius_k[k+1] = radius_k[k]
-            # print("good")
-
     if rho > ada:
         x[k+1] = x[k] + p
         r = residual(x[k+1])
@@ -274,22 +245,26 @@ for k in range(0,k_max-1):
     else:
         x[k+1] = x[k]
 
-    f_k[k+1] = 1/2 * np.dot(r,r)
+    f_k[k+1] = np.dot(r,r)
 
-    if (f_k[k+1] - f_k[k]) > 1e-15:
-        print("BAD STEP EXCEPTED!!!!", rho)
+    if (f_k[k+1] - f_k[k]) > 0:
+        print("BAD STEP ACCEPTED!!!!")
         if (f_k[k] - fp)<0 and (f_k[k] - m)<0:
             print('Reason: model minimized incorrectly and the step increased the function')
+        f_k[k+1]=f_k[k]
+        x[k+1]=x[k]
         break
 
-    print(f_k[k+1]-f_k[k],x[k+1],k)
+    # print(f_k[k+1]-f_k[k],x[k+1],k)
+try:
+    k
+except Exception as e:
+    k=-1
+print('We just stopped at ',x[k+1],f_k[k+1],k+1)
 
-print('We just stopped at ',x[k],f_k[k])
-
-
-S, I, R = sir_model(range(0,country_df.shape[0]),x[k+1][0],x[k+1][1],x[k+1][2],ics)
-plot_results(x[k][2],dates,S,I,R,country_df)
-
+S, I, R = sir_model(range(0,country_df.shape[0]),x[k+1][0],x[k+1][1],x[k+1][2],x[k+1][3])
+plot_results(dates,S,I,R,country_df)
+print(r)
 # Plotting xk sequence.
 
 xs = np.transpose(x[0:k+2])[0]
@@ -302,7 +277,7 @@ fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 ax.set_xlabel('beta')
 ax.set_ylabel('gamma')
-ax.set_zlabel('N')
+ax.set_zlabel('s0')
 
 ax.scatter(xs, ys, zs)
 
