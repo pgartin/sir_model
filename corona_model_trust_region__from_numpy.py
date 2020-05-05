@@ -78,8 +78,8 @@ def loadData(src,start_point,country):
 def sir_model(t,beta,gamma,delta, s0,i0):
 
     # The initially recvoerd count is fixed by nomralization.
-    r0 = 1 - s0 - i0
     d0 = 0
+    r0 = 1 - s0 - i0 - d0
 
     # The SIR model differential equations.
     def deriv(y, t, beta, gamma, delta):
@@ -137,7 +137,7 @@ def residual(x):
 
     return rvector
 
-def computeDerivatives(x,r):
+def jacobian(x,r):
     deltaf=[]
     rOnes=[]
     e = np.identity(n)
@@ -148,18 +148,29 @@ def computeDerivatives(x,r):
         rOnes.append(r)
     j = (np.column_stack(deltaf) - np.column_stack(rOnes))/ep
 
-    # Gradient
-    g= np.matmul(np.transpose(j),r)
-    # Approximate hessian
-    h=nearestSPD(np.matmul(np.transpose(j),j))
+    return j
 
-    return g, h, j
+def model(x):
+    r = residual(x)
+    return np.dot(r,r)
+
+def model_der(x):
+    r = residual(x)
+    j = jacobian(x,r)
+    g= np.matmul(np.transpose(j),r)
+
+    return g
+
+def model_hess(x):
+    r = residual(x)
+    j = jacobian(x,r)
+    # h=nearestSPD(np.matmul(np.transpose(j),j))
+    h=np.matmul(np.transpose(j),j)
+
+    return h
 
 def quad_model(f,g,h,p):
     return f + np.matmul(g.transpose(),p) + np.matmul(p.transpose(),np.matmul(h,p));
-
-def is_pos_def(x):
-    return np.all(np.linalg.eigvals(x) > 0)
 
 def nearestSPD(A):
     L, Q = np.linalg.eig(A)
@@ -172,124 +183,40 @@ def nearestSPD(A):
             t.append(ep - L[i])
     return A + np.matmul(Q,np.matmul(np.diag(t),Q.transpose()))
 
-def find_step(f,g,h,x):
-    def model(p):
-        return quad_model(f,g,h,p)
-    x0 = 1e-3*np.ones(n)
-    bnds = Bounds(-radius_k[k]*np.ones(n), radius_k[k]*np.ones(n))
-    def constraint0(t):
-        return 1 - (x[3] + t[3]) - (x[4] + t[4])
-    def constraint1(t):
-        return x[0] + t[0]
-    def constraint2(t):
-        return x[1] + t[1]
-    def constraint3(t):
-        return x[2] + t[2]
-    def constraint4(t):
-        return x[3] + t[3]
-    def constraint5(t):
-        return x[4] + t[4]
-
-    con0 = {'type' : 'ineq', 'fun': constraint0}
-    con1 = {'type' : 'ineq', 'fun': constraint1}
-    con2 = {'type' : 'ineq', 'fun': constraint2}
-    con3 = {'type' : 'ineq', 'fun': constraint3}
-    con4 = {'type' : 'ineq', 'fun': constraint4}
-    con5 = {'type' : 'ineq', 'fun': constraint5}
-    cons = [con0,con1,con2,con3,con4]
-    res = minimize(model, x0, method='SLSQP', bounds=bnds,constraints=cons,options={ 'ftol': 1e-15,'disp': False})
-    p = res.x
-
-    return p, model(p)
-
-# Initialized variables
-k_max=2000
 # src=1 for from text file, 2 for from a known model, and 3 from the online database
 country_df, dates = loadData(1,60,"Italy")
-
 n=5
-x = np.zeros([k_max+1,n]);
-
-# [beta, gamma, delta, s0, i0]
-x[0] = [0.1, 0.1,.1, 0.999,.001]
-# x[0] = [1.42084214, 0.010877, 1.38034304, 0.99729111, 0.00228127]
-
 ep = 1e-8
-f_k = np.zeros(k_max+1);
 
-max_radius = .1
-radius_k = np.zeros([k_max+1,1]);
-radius_k[0] = max_radius
+x0 = np.array([0.1, 0.1,.1, 0.999,.001])
 
-ada = 1/4
+# bnds = Bounds(-radius_k[k]*np.ones(n), radius_k[k]*np.ones(n))
+def constraint0(x):
+    return 1 - x[3] - x[4]
+def constraint1(x):
+    return x[0]
+def constraint2(x):
+    return x[1]
+def constraint3(x):
+    return x[2]
+def constraint4(x):
+    return x[3]
+def constraint5(x):
+    return x[4]
 
-r = residual(x[0])
-f_k[0] = np.dot(r,r)
-for k in range(0,k_max):
-    g, h, j = computeDerivatives(x[k],r)
+con0 = {'type' : 'ineq', 'fun': constraint0}
+con1 = {'type' : 'ineq', 'fun': constraint1}
+con2 = {'type' : 'ineq', 'fun': constraint2}
+con3 = {'type' : 'ineq', 'fun': constraint3}
+con4 = {'type' : 'ineq', 'fun': constraint4}
+con5 = {'type' : 'ineq', 'fun': constraint5}
+cons = [con0,con1,con2,con3,con4]
 
-    # Minimizes the quadratic model
-    p, m = find_step(f_k[k],g,h,x[k])
+res = minimize(model, x0, method='trust-ncg',constraints=cons,jac=model_der, hess=model_hess,options={'gtol': 1e-10, 'disp': True})
+x = res.x
 
-    rp = residual(x[k]+p)
-    fp = np.dot(rp,rp)
+print('We just stopped at ',x)
+print(res)
 
-    if((f_k[k] - m)==0):
-        print("Model is minimized at x_k")
-        print(g)
-        break
-    rho = (f_k[k] - fp)/(f_k[k] - m)
-
-    if rho < 1/4:
-        # bad agreement between the model and the function
-        radius_k[k+1] = (1/4)*radius_k[k]
-    else:
-        if rho > (3/4):
-            # Great agreement between the model and the function
-            radius_k[k+1] = min(2*radius_k[k],max_radius)
-        else:
-            # good agreement between the model and the function
-            radius_k[k+1] = radius_k[k]
-    if rho > ada:
-        x[k+1] = x[k] + p
-        r = residual(x[k+1])
-
-    else:
-        x[k+1] = x[k]
-
-    f_k[k+1] = np.dot(r,r)
-
-    if (f_k[k+1] - f_k[k]) > 0:
-        print("BAD STEP ACCEPTED!!!!")
-        if (f_k[k] - fp)<0 and (f_k[k] - m)<0:
-            print('Reason: model minimized incorrectly and the step increased the function')
-        f_k[k+1]=f_k[k]
-        x[k+1]=x[k]
-        break
-
-    print(f_k[k+1]-f_k[k],x[k+1],k)
-try:
-    k
-except Exception as e:
-    k=-1
-print('We just stopped at ',x[k+1],f_k[k+1],k+1)
-
-S, I, R, D = sir_model(range(0,country_df.shape[0]),x[k+1][0],x[k+1][1],x[k+1][2],x[k+1][3],x[k+1][4])
+S, I, R, D = sir_model(range(0,country_df.shape[0]),x[0],x[1],x[2],x[3],x[4])
 plot_results(dates,S,I,R,country_df)
-
-# Plotting xk sequence.
-xs = np.transpose(x[0:k+2])[0]
-ys =np.transpose(x[0:k+2])[1]
-zs =np.transpose(x[0:k+2])[2]
-fs = np.array(f_k[0:k+2])
-
-# 3D plot with f(x) on the z-axis
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ax.set_xlabel('beta')
-ax.set_ylabel('gamma')
-ax.set_zlabel('delta')
-
-ax.scatter(xs, ys, zs)
-
-plt.show()
