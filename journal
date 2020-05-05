@@ -55,3 +55,8 @@ Things we want to try:
   I'm not really sure how I want to proceed, but for starters we can start to optimize the initial infected population, that will fix the initial recovered by normalization. I want to look closely that I am considering the death count properly. After this, I really need to investigate the questions above. For this I want to take a close look at what the residue function says when this happens.
 
   Good news, we are getting consistent results with the TRM. Bad news, the best the model can get is not looking good. I believe we are reaching limitations with this model. Maybe it's time we include deaths. Be sure to take plot pictures at this point
+  Need to consider more ways to improve the model. There is a lot more we can do with countries where the virus has run its course.
+    -We can add this extra incubated columns.
+    -Let also try another data source.
+
+  Alright good day to you. I'm out.
