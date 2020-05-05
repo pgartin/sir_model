@@ -10,9 +10,16 @@ from mpl_toolkits.mplot3d import Axes3D
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 
-def loadData(src,start_point):
+def loadData(src,start_point,country):
 
-    population = 382.2e6
+    if country == "US":
+        population = 46.94e6
+    elif country == "Italy":
+        population = 60.36e6
+    elif country == "Spain":
+        population = 46.94e6
+    else:
+        population =25e6
 
     # Get Data
     baseURL = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/"
@@ -33,7 +40,7 @@ def loadData(src,start_point):
         df.to_csv('all_data.csv')
     elif src==2:
         df = pd.read_csv('all_data.csv')
-        df = df[df["Country/Region"] == "US"]
+        df = df[df["Country/Region"] == country]
 
         S, I, R, D = sir_model(range(0,df.shape[0]),0.18079949, 0.04784786,.01, 0.999,.001)
         sample_df = pd.DataFrame(data={'I':I,'R':R})
@@ -50,7 +57,7 @@ def loadData(src,start_point):
     # Select desired data/sort
     countries = df['Country/Region'].unique()
     countries.sort()
-    country_df = df[df["Country/Region"] == "US"]
+    country_df = df[df["Country/Region"] == country]
 
     country_df = country_df[["date","CumDeaths","CumConfirmed","CumRecovered"]]
     country_df["date"] = pd.to_datetime(df["date"])
@@ -118,11 +125,11 @@ def residual(x):
     sir_df = pd.DataFrame(data={'I':I,'R':R,'D':D})
     country_df["I"]=sir_df["I"].values.tolist()
     country_df["R"]=sir_df["R"].values.tolist()
-    country_df["D"]=sir_df["D"].values.tolist()
+    # country_df["D"]=sir_df["D"].values.tolist()
 
     country_df["ErrorI"] = country_df["I"] - country_df['CumInfected']
     country_df["ErrorR"] = country_df["R"] - country_df['CumRecovered']
-    country_df["ErrorD"] = country_df["D"] - country_df['CumDeaths']
+    # country_df["ErrorD"] = country_df["D"] - country_df['CumDeaths']
 
     #residual
     rvector = np.append(country_df["ErrorI"].to_numpy(), country_df["ErrorR"].to_numpy())
@@ -190,26 +197,23 @@ def find_step(f,g,h,x):
     con4 = {'type' : 'ineq', 'fun': constraint4}
     con5 = {'type' : 'ineq', 'fun': constraint5}
     cons = [con0,con1,con2,con3,con4]
-    res = minimize(model, x0, method='SLSQP', bounds=bnds,constraints=cons,options={ 'ftol': 1e-11,'disp': False})
+    res = minimize(model, x0, method='SLSQP', bounds=bnds,constraints=cons,options={ 'ftol': 1e-15,'disp': False})
     p = res.x
 
     return p, model(p)
 
-
-
 # Initialized variables
 k_max=2000
-country_df, dates = loadData(1,20)
+# src=1 for from text file, 2 for from a known model, and 3 from the online database
+country_df, dates = loadData(3,0,"Italy")
 
 n=5
 x = np.zeros([k_max+1,n]);
 
 # [beta, gamma, delta, s0, i0]
-# x[0] =[.1, .1, .1,.1,.1]
 x[0] = [0.1, 0.1,.1, 0.999,.001]
-# x[0] = [1.44198437e+00, 7.62296447e-03, 1.33890423e+00, 9.99987461e-01, 1.25387525e-05]
+# x[0] = [1.42084214, 0.010877, 1.38034304, 0.99729111, 0.00228127]
 
-# src=1 for from text file, 2 for from a known model, and 3 from the online database
 ep = 1e-8
 f_k = np.zeros(k_max+1);
 
