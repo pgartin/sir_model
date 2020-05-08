@@ -60,3 +60,10 @@ Things we want to try:
     -Let also try another data source.
 
   Alright good day to you. I'm out.
+
+
+5/5/20
+  Alright we need to think about what to do with my code. Annoying problems might be a good place to start. Making prediction is hard because the reproduction number is always changing as public policy and response changes. So we could potentially do some comparison in the values before and after the #socialdistancing movement.
+
+5/6/2020
+  We can get beta, gamma, delta variables from the peak region with a pretty good fit. Then we can go a back to the inital conditions and compare.

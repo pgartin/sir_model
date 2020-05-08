@@ -10,7 +10,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 
-def loadData(src,start_point,country):
+def loadData(src,start_point,end_point,country):
 
     if country == "US":
         population = 46.94e6
@@ -18,6 +18,8 @@ def loadData(src,start_point,country):
         population = 60.36e6
     elif country == "Spain":
         population = 46.94e6
+    elif country == "Korea, South":
+        population = 51.64e6
     else:
         population =25e6
 
@@ -71,15 +73,17 @@ def loadData(src,start_point,country):
     country_df["CumInfected"] = country_df["CumConfirmed"] - country_df["CumRecovered"] - country_df["CumDeaths"]
 
     if src!=2:
-        country_df, dates = country_df[start_point:], dates[start_point:]
+        if end_point>0:
+            country_df, dates = country_df[start_point:end_point], dates[start_point:end_point]
+        else:
+            country_df, dates = country_df[start_point:], dates[start_point:]
 
     return country_df, dates
 
-def sir_model(t,beta,gamma,delta, s0,i0):
+def sir_model(t,beta,gamma,delta, s0,i0, d0):
 
     # The initially recvoerd count is fixed by nomralization.
-    r0 = 1 - s0 - i0
-    d0 = 0
+    r0 = 1 - s0 - i0 - d0
 
     # The SIR model differential equations.
     def deriv(y, t, beta, gamma, delta):
@@ -98,7 +102,7 @@ def sir_model(t,beta,gamma,delta, s0,i0):
 
     return ret.T
 
-def plot_results(index,S,I,R,df):
+def plot_results(index,S,I,R,df,x):
 
     # Plot the data on three separate curves for S(t), I(t) and R(t)
     fig = plt.figure(facecolor='w')
@@ -109,7 +113,7 @@ def plot_results(index,S,I,R,df):
 
     ax.plot(index, country_df["CumInfected"], 'r', alpha=0.5, lw=2, label='Infected')
     ax.plot(index, country_df["CumRecovered"], 'b', alpha=0.5, lw=2, label='Recovered')
-    ax.plot(index, country_df["CumDeaths"], 'g', alpha=0.5, lw=2, label='Deaths')
+    # ax.plot(index, country_df["CumDeaths"], 'g', alpha=0.5, lw=2, label='Deaths')
     ax.set_xlabel('Time /days')
     ax.set_ylabel('Percentage of Pop.')
     # ax.set_ylim(0,.002)
@@ -119,17 +123,34 @@ def plot_results(index,S,I,R,df):
         ax.spines[spine].set_visible(False)
     plt.show()
 
+    # Plotting xk sequence.
+    xs = np.transpose(x[0:k+2])[0]
+    ys =np.transpose(x[0:k+2])[1]
+    zs =np.transpose(x[0:k+2])[2]
+    fs = np.array(f_k[0:k+2])
+
+    # 3D plot with f(x) on the z-axis
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_xlabel('beta')
+    ax.set_ylabel('gamma')
+    ax.set_zlabel('delta')
+
+    ax.scatter(xs, ys, zs)
+
+    plt.show()
+
 def residual(x):
-    S, I, R, D = sir_model(range(0,country_df.shape[0]),x[0],x[1],x[2],x[3],x[4])
+    S, I, R, D = sir_model(range(0,country_df.shape[0]),x[0],x[1],x[2],x[3],x[4],x[5])
 
     sir_df = pd.DataFrame(data={'I':I,'R':R,'D':D})
     country_df["I"]=sir_df["I"].values.tolist()
     country_df["R"]=sir_df["R"].values.tolist()
-    # country_df["D"]=sir_df["D"].values.tolist()
+    country_df["D"]=sir_df["D"].values.tolist()
 
     country_df["ErrorI"] = country_df["I"] - country_df['CumInfected']
     country_df["ErrorR"] = country_df["R"] - country_df['CumRecovered']
-    # country_df["ErrorD"] = country_df["D"] - country_df['CumDeaths']
+    country_df["ErrorD"] = country_df["D"] - country_df['CumDeaths']
 
     #residual
     rvector = np.append(country_df["ErrorI"].to_numpy(), country_df["ErrorR"].to_numpy())
@@ -178,7 +199,7 @@ def find_step(f,g,h,x):
     x0 = 1e-3*np.ones(n)
     bnds = Bounds(-radius_k[k]*np.ones(n), radius_k[k]*np.ones(n))
     def constraint0(t):
-        return 1 - (x[3] + t[3]) - (x[4] + t[4])
+        return 1 - (x[3] + t[3]) - (x[4] + t[4]) - (x[5] + t[5])
     def constraint1(t):
         return x[0] + t[0]
     def constraint2(t):
@@ -189,6 +210,8 @@ def find_step(f,g,h,x):
         return x[3] + t[3]
     def constraint5(t):
         return x[4] + t[4]
+    def constraint6(t):
+        return x[5] + t[5]
 
     con0 = {'type' : 'ineq', 'fun': constraint0}
     con1 = {'type' : 'ineq', 'fun': constraint1}
@@ -196,28 +219,29 @@ def find_step(f,g,h,x):
     con3 = {'type' : 'ineq', 'fun': constraint3}
     con4 = {'type' : 'ineq', 'fun': constraint4}
     con5 = {'type' : 'ineq', 'fun': constraint5}
-    cons = [con0,con1,con2,con3,con4]
+    con6 = {'type' : 'ineq', 'fun': constraint5}
+    cons = [con0,con1,con2,con3,con4,con5,con6]
     res = minimize(model, x0, method='SLSQP', bounds=bnds,constraints=cons,options={ 'ftol': 1e-15,'disp': False})
     p = res.x
 
     return p, model(p)
 
 # Initialized variables
-k_max=2000
+k_max=200
 # src=1 for from text file, 2 for from a known model, and 3 from the online database
-country_df, dates = loadData(1,60,"Italy")
+country_df, dates = loadData(1,80,0,"US")
 
-n=5
+n=6
 x = np.zeros([k_max+1,n]);
 
-# [beta, gamma, delta, s0, i0]
-x[0] = [0.1, 0.1,.1, 0.999,.001]
-# x[0] = [1.42084214, 0.010877, 1.38034304, 0.99729111, 0.00228127]
+# [beta, gamma, delta, s0, i0,d0]
+x[0] = [.1, .1, .1, .9, .1, 0]
+
 
 ep = 1e-8
 f_k = np.zeros(k_max+1);
 
-max_radius = .1
+max_radius = 1
 radius_k = np.zeros([k_max+1,1]);
 radius_k[0] = max_radius
 
@@ -272,24 +296,10 @@ try:
     k
 except Exception as e:
     k=-1
-print('We just stopped at ',x[k+1],f_k[k+1],k+1)
 
-S, I, R, D = sir_model(range(0,country_df.shape[0]),x[k+1][0],x[k+1][1],x[k+1][2],x[k+1][3],x[k+1][4])
-plot_results(dates,S,I,R,country_df)
+results = {'x':x[k+1],'f':f_k[k+1],'iterations':k+1,'R0':x[k+1][0]/x[k+1][1]}
+print(results)
 
-# Plotting xk sequence.
-xs = np.transpose(x[0:k+2])[0]
-ys =np.transpose(x[0:k+2])[1]
-zs =np.transpose(x[0:k+2])[2]
-fs = np.array(f_k[0:k+2])
-
-# 3D plot with f(x) on the z-axis
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ax.set_xlabel('beta')
-ax.set_ylabel('gamma')
-ax.set_zlabel('delta')
-
-ax.scatter(xs, ys, zs)
-
-plt.show()
+S, I, R, D = sir_model(range(0,country_df.shape[0]),x[k+1][0],x[k+1][1],x[k+1][2],x[k+1][3],x[k+1][4],x[k+1][5])
+print(S[0],I[0],R[0],D[0])
+plot_results(dates,S,I,R,country_df,x)

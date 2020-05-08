@@ -18,6 +18,8 @@ def loadData(src,start_point,country):
         population = 60.36e6
     elif country == "Spain":
         population = 46.94e6
+    elif country == "Korea, South":
+        population = 51.64e6
     else:
         population =25e6
 
@@ -133,6 +135,7 @@ def residual(x):
 
     #residual
     rvector = np.append(country_df["ErrorI"].to_numpy(), country_df["ErrorR"].to_numpy())
+
     # rvector = np.append(rvector,country_df["ErrorD"].to_numpy())
 
     return rvector
@@ -184,7 +187,7 @@ def nearestSPD(A):
     return A + np.matmul(Q,np.matmul(np.diag(t),Q.transpose()))
 
 # src=1 for from text file, 2 for from a known model, and 3 from the online database
-country_df, dates = loadData(1,60,"Italy")
+country_df, dates = loadData(1,70,"Italy")
 n=5
 ep = 1e-8
 
@@ -210,13 +213,13 @@ con2 = {'type' : 'ineq', 'fun': constraint2}
 con3 = {'type' : 'ineq', 'fun': constraint3}
 con4 = {'type' : 'ineq', 'fun': constraint4}
 con5 = {'type' : 'ineq', 'fun': constraint5}
-cons = [con0,con1,con2,con3,con4]
+cons = [con0,con1,con2,con3,con4,con5]
 
 res = minimize(model, x0, method='trust-ncg',constraints=cons,jac=model_der, hess=model_hess,options={'gtol': 1e-10, 'disp': True})
 x = res.x
 
 print('We just stopped at ',x)
-print(res)
+print(type(res))
 
 S, I, R, D = sir_model(range(0,country_df.shape[0]),x[0],x[1],x[2],x[3],x[4])
 plot_results(dates,S,I,R,country_df)
