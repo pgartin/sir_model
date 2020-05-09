@@ -67,3 +67,6 @@ Things we want to try:
 
 5/6/2020
   We can get beta, gamma, delta variables from the peak region with a pretty good fit. Then we can go a back to the inital conditions and compare.
+
+5/8/20
+  So current status. The SIR model will not converge to the data as is. Not even close. Adding in the dead bin, allows for a better fit, but the deaths don't come close to matching the dead count data. And so I can get a curve that represents the infected population well, but does not fit the rest. Allowing a death bin gives me a place to move as many people as I want out of the infected bin to match the curve accurartely. This is cheating as far as doing a data fit goes. So a few questions. Can I make a change to the model that will fit the data in a an understood way? I don't know.
