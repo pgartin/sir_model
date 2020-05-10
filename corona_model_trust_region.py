@@ -20,6 +20,16 @@ def loadData(src,start_point,end_point,country):
         population = 46.94e6
     elif country == "Korea, South":
         population = 51.64e6
+    elif country == "Sweden":
+        population = 10.23e6
+    elif country == "Germany":
+        population = 83.02e6
+    elif country == "China":
+        population = 1.393e9
+    elif country == "Russia":
+        population = 144.5e6
+    elif country == "Russia":
+        population = 66.99e6
     else:
         population =25e6
 
@@ -44,7 +54,7 @@ def loadData(src,start_point,end_point,country):
         df = pd.read_csv('all_data.csv')
         df = df[df["Country/Region"] == country]
 
-        S, I, R, D = sir_model(range(0,df.shape[0]),0.18079949, 0.04784786,.01, 0.999,.001)
+        S, I, R, D = sir_model(range(0,df.shape[0]),0.4, .03,.01, 0.9999,.0001,0)
         sample_df = pd.DataFrame(data={'I':I,'R':R})
         df["CumInfected"] = sample_df["I"].values.tolist()
         df["CumRecovered"] = sample_df["R"].values.tolist()
@@ -73,14 +83,15 @@ def loadData(src,start_point,end_point,country):
     country_df["CumInfected"] = country_df["CumConfirmed"] - country_df["CumRecovered"] - country_df["CumDeaths"]
 
     if src!=2:
-        if end_point>0:
+        # if end_point != 0:
+        if True:
             country_df, dates = country_df[start_point:end_point], dates[start_point:end_point]
         else:
             country_df, dates = country_df[start_point:], dates[start_point:]
 
     return country_df, dates
 
-def sir_model(t,beta,gamma,delta, s0,i0, d0):
+def sir_model(t,beta,gamma, delta, s0, i0, d0):
 
     # The initially recvoerd count is fixed by nomralization.
     r0 = 1 - s0 - i0 - d0
@@ -107,9 +118,14 @@ def plot_results(index,S,I,R,df,x):
     # Plot the data on three separate curves for S(t), I(t) and R(t)
     fig = plt.figure(facecolor='w')
     ax = fig.add_subplot(111, axisbelow=True)
+
+    # rotate and align the tick labels so they look better
+    fig.autofmt_xdate()
+
     # ax.plot(index, S, 'b', alpha=0.5, lw=2, label='Susceptible(Model)',dashes=[3, 3, 3, 3])
     ax.plot(index, I, 'r', alpha=0.5, lw=2, label='Infected(Model)',dashes=[3, 3, 3, 3])
     ax.plot(index, R, 'b', alpha=0.5, lw=2, label='Recovered with immunity(Model)',dashes=[3, 3, 3, 3])
+    # ax.plot(index, D, 'g', alpha=0.5, lw=2, label='Deaths(Model)',dashes=[3, 3, 3, 3])
 
     ax.plot(index, country_df["CumInfected"], 'r', alpha=0.5, lw=2, label='Infected')
     ax.plot(index, country_df["CumRecovered"], 'b', alpha=0.5, lw=2, label='Recovered')
@@ -153,7 +169,8 @@ def residual(x):
     country_df["ErrorD"] = country_df["D"] - country_df['CumDeaths']
 
     #residual
-    rvector = np.append(country_df["ErrorI"].to_numpy(), country_df["ErrorR"].to_numpy())
+    rvector = country_df["ErrorI"].to_numpy()
+    rvector = np.append(rvector,country_df["ErrorR"].to_numpy())
     # rvector = np.append(rvector,country_df["ErrorD"].to_numpy())
 
     return rvector
@@ -227,16 +244,15 @@ def find_step(f,g,h,x):
     return p, model(p)
 
 # Initialized variables
-k_max=200
-# src=1 for from text file, 2 for from a known model, and 3 from the online database
-country_df, dates = loadData(1,80,0,"US")
+k_max=2000
+# src=3 for from text file, 2 for from a known model, and 1 from the online database
+country_df, dates = loadData(1,0, -1,"Italy")
 
 n=6
 x = np.zeros([k_max+1,n]);
 
-# [beta, gamma, delta, s0, i0,d0]
-x[0] = [.1, .1, .1, .9, .1, 0]
-
+# [beta, gamma, delta, s0, i0, d0]
+x[0] = [ .1,.1,.1, 9.99e-01, 1e-3, 0]
 
 ep = 1e-8
 f_k = np.zeros(k_max+1);
@@ -284,14 +300,11 @@ for k in range(0,k_max):
     f_k[k+1] = np.dot(r,r)
 
     if (f_k[k+1] - f_k[k]) > 0:
-        print("BAD STEP ACCEPTED!!!!")
-        if (f_k[k] - fp)<0 and (f_k[k] - m)<0:
-            print('Reason: model minimized incorrectly and the step increased the function')
+        # This will occur when change of f is within the tolerance set by the optimize in find_step()
         f_k[k+1]=f_k[k]
         x[k+1]=x[k]
         break
 
-    print(f_k[k+1]-f_k[k],x[k+1],k)
 try:
     k
 except Exception as e:
@@ -301,5 +314,5 @@ results = {'x':x[k+1],'f':f_k[k+1],'iterations':k+1,'R0':x[k+1][0]/x[k+1][1]}
 print(results)
 
 S, I, R, D = sir_model(range(0,country_df.shape[0]),x[k+1][0],x[k+1][1],x[k+1][2],x[k+1][3],x[k+1][4],x[k+1][5])
-print(S[0],I[0],R[0],D[0])
+
 plot_results(dates,S,I,R,country_df,x)
